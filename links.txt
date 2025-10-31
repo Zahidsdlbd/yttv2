@@ -1,0 +1,3 @@
+# Format: Channel Name | @handle or videoId or full YouTube URL
+Independent Television | @IndependentTelevision
+NASA Live | @NASA
