@@ -1,0 +1,64 @@
+name: Scheduled HLS Playlist Update
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 minutes
+  workflow_dispatch:         # allows manual run
+
+permissions:
+  contents: write
+
+concurrency:
+  group: playlist-update
+  cancel-in-progress: true
+
+jobs:
+  update_playlist:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install latest yt-dlp nightly
+        run: pip install -U --pre yt-dlp
+
+      - name: Generate playlist
+        run: python generate_playlist.py
+
+      - name: Commit and push changes
+        run: |
+          set -e
+          echo "🔍 Checking playlist changes..."
+          if git diff --quiet -- playlist.m3u8; then
+            echo "✅ No updates detected — skipping commit."
+            exit 0
+          fi
+
+          echo "🎯 Changes detected, committing..."
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add playlist.m3u8
+          git commit -m "🤖 Auto Playlist Update [skip ci]"
+          git pull --no-rebase --no-edit || true
+          git push
+
+          echo "🚀 Playlist successfully updated!"
