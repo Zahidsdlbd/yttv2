@@ -2,8 +2,9 @@ name: Scheduled HLS Playlist Update
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes
-  workflow_dispatch:         # allows manual run
+    # Runs every 30 minutes
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -17,16 +18,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 🧩 Step 1 — Checkout code from main
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: main  # Ensure we are working on the main branch
 
+      # 🧩 Step 2 — Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
+      # 🧩 Step 3 — Cache pip packages
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -35,30 +40,45 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
+      # 🧩 Step 4 — Install dependencies
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Install latest yt-dlp nightly
+      # 🧩 Step 5 — Update yt-dlp nightly (always latest YouTube support)
+      - name: Update yt-dlp to latest nightly
         run: pip install -U --pre yt-dlp
 
+      # 🧩 Step 6 — Generate playlist
       - name: Generate playlist
         run: python generate_playlist.py
 
+      # 🧩 Step 7 — Commit and push changes to main
       - name: Commit and push changes
         run: |
           set -e
-          echo "🔍 Checking playlist changes..."
+          echo "🔍 Checking for playlist changes..."
+          git status
+
+          # Skip if no changes
           if git diff --quiet -- playlist.m3u8; then
             echo "✅ No updates detected — skipping commit."
             exit 0
           fi
 
-          echo "🎯 Changes detected, committing..."
+          echo "🎯 Changes detected, committing and pushing..."
+
+          # Configure Git
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Ensure we're on main
+          git fetch origin main
+          git checkout main
+          git pull origin main --no-rebase --no-edit || true
+
+          # Stage, commit, and push changes
           git add playlist.m3u8
           git commit -m "🤖 Auto Playlist Update [skip ci]"
-          git pull --no-rebase --no-edit || true
-          git push
+          git push origin main
 
-          echo "🚀 Playlist successfully updated!"
+          echo "🚀 Playlist successfully committed and pushed to main!"
