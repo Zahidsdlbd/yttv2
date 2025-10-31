@@ -2,8 +2,8 @@ name: Scheduled HLS Playlist Update
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # Every 30 minutes
-  workflow_dispatch:
+    - cron: "*/30 * * * *"   # Runs every 30 minutes
+  workflow_dispatch:          # Allows manual runs from GitHub Actions tab
 
 permissions:
   contents: write
@@ -17,40 +17,62 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout main branch
+      # 🧩 1️⃣ Checkout repository
+      - name: Checkout repository (main branch)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: main
 
+      # 🧩 2️⃣ Set up Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
+      # 🧩 3️⃣ Install dependencies
       - name: Install dependencies
         run: |
+          echo "🔧 Upgrading pip and installing requirements..."
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
           pip install -U --pre yt-dlp
 
-      - name: Generate playlist
+      # 🧩 4️⃣ Debug info — check working directory
+      - name: Verify environment
         run: |
-          echo "Running generate_playlist.py..."
-          python generate_playlist.py
-          echo "Files generated:"
+          echo "📁 Current working directory:"
+          pwd
+          echo "📂 Files before running:"
           ls -la
 
-      - name: Commit and push changes
+      # 🧩 5️⃣ Run Python generator (with debug)
+      - name: Generate playlist (with debug)
+        run: |
+          echo "🚀 Running generate_playlist.py..."
+          python generate_playlist.py || true
+          echo "-----------------------------------------"
+          echo "📂 Files after running:"
+          ls -la
+          echo "-----------------------------------------"
+          echo "🧾 playlist.m3u8 content preview (if exists):"
+          cat playlist.m3u8 || echo "❌ playlist.m3u8 not created!"
+          echo "-----------------------------------------"
+
+      # 🧩 6️⃣ Commit and push back to main
+      - name: Commit and push changes to main
         run: |
           set -e
+          echo "🔍 Checking if playlist.m3u8 exists..."
           if [ ! -f "playlist.m3u8" ]; then
-            echo "❌ playlist.m3u8 not found. Script failed."
+            echo "❌ playlist.m3u8 missing — script failed or YouTube blocked extraction."
             exit 1
           fi
 
           if git diff --quiet -- playlist.m3u8; then
-            echo "✅ No changes detected — skipping commit."
+            echo "✅ No updates detected in playlist.m3u8 — skipping commit."
             exit 0
           fi
 
@@ -58,8 +80,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          git fetch origin main
+          git checkout main
+          git pull origin main --no-rebase --no-edit || true
+
           git add playlist.m3u8
           git commit -m "🤖 Auto Playlist Update [skip ci]"
           git push origin main
 
-          echo "🚀 playlist.m3u8 successfully updated on main!"
+          echo "🚀 playlist.m3u8 successfully committed and pushed to main!"
